@@ -1,0 +1,366 @@
+{
+  "id": "CPEMonitor",
+  "meta": {
+    "name": "CPE随身WiFi",
+    "version": "1.0",
+    "author": "LiteMonitor",
+    "description": "监控中兴 U60 Pro 的电量、信号、速率"
+  },
+  "inputs": [
+    {
+      "key": "gateway",
+      "label": "设备地址",
+      "type": "text",
+      "default": "192.168.0.1",
+      "placeholder": "只填IP，不要加http://",
+      "scope": "target"
+    }
+  ],
+  "execution": {
+    "type": "chain",
+    "interval": 60,
+    "steps": [
+      {
+        "id": "fetch_status",
+        "url": "http://{{gateway}}/ubus/",
+        "method": "POST",
+        "body": "[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"00000000000000000000000000000000\",\"zwrt_router.api\",\"router_get_status_no_auth\",{}]},{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"call\",\"params\":[\"00000000000000000000000000000000\",\"zwrt_zte_mdm.api\",\"get_sim_info_before\",{}]},{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"call\",\"params\":[\"00000000000000000000000000000000\",\"zte_nwinfo_api\",\"nwinfo_get_netinfo\",{}]},{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"call\",\"params\":[\"00000000000000000000000000000000\",\"zwrt_data\",\"get_wwandst\",{\"source_module\":\"web\",\"cid\":1,\"type\":4}]},{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"call\",\"params\":[\"00000000000000000000000000000000\",\"zwrt_data\",\"get_wwaniface\",{\"source_module\":\"web\",\"cid\":1,\"connect_status\":\"\"}]},{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"call\",\"params\":[\"00000000000000000000000000000000\",\"zwrt_mc.device.manager\",\"get_device_info\",{\"deviceInfoList\":[\"bat_online\",\"bat_percent\",\"bat_charger_connect\",\"bat_charger_status\",\"bat_temperature\",\"power_saver_mode\"]}]},{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"call\",\"params\":[\"00000000000000000000000000000000\",\"zwrt_wlan\",\"report\",{}]}]",
+        "response_format": "text",
+        "extract": {
+          "raw": "$"
+        },
+        "process": [
+          {
+            "var": "bat",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"bat_percent\"\\s*:\\s*\"?(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "chg",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"bat_charger_connect\"\\s*:\\s*\"?(\\d)",
+            "to": "1"
+          },
+          {
+            "var": "bat_temp",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"bat_temperature\"\\s*:\\s*\"?(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "chg_icon",
+            "source": "chg",
+            "function": "map",
+            "map": {
+              "1": "⚡",
+              "true": "⚡"
+            }
+          },
+          {
+            "var": "chg_icon",
+            "source": "chg_icon",
+            "function": "regex_replace",
+            "pattern": "^(?!⚡)[\\s\\S]*$",
+            "to": ""
+          },
+          {
+            "var": "net_type",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"network_type\"\\s*:\\s*\"?([^\",}]+)",
+            "to": "1"
+          },
+          {
+            "var": "band",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"wan_active_band\"\\s*:\\s*\"([^\"]*)\"",
+            "to": "1"
+          },
+          {
+            "var": "provider",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"network_provider_fullname\"\\s*:\\s*\"([^\"]*)\"",
+            "to": "1"
+          },
+          {
+            "var": "provider_cn",
+            "source": "provider",
+            "function": "map",
+            "map": {
+              "China Mobile": "中国移动",
+              "CMCC": "中国移动",
+              "China Unicom": "中国联通",
+              "China Telecom": "中国电信",
+              "China Tietong": "中国铁通"
+            }
+          },
+          {
+            "var": "rsrp5g",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"nr5g_rsrp\"\\s*:\\s*\"?(-?[1-9]\\d*)",
+            "to": "1"
+          },
+          {
+            "var": "rsrp4g",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"lte_rsrp\"\\s*:\\s*\"?(-?[1-9]\\d*)",
+            "to": "1"
+          },
+          {
+            "var": "rsrp",
+            "source": "rsrp5g",
+            "function": "regex_replace",
+            "pattern": "^[\\s\\S]*$",
+            "to": "{{rsrp5g ?? rsrp4g}}"
+          },
+          {
+            "var": "rsrp_txt",
+            "source": "rsrp",
+            "function": "regex_replace",
+            "pattern": "^(-?\\d+)$",
+            "to": " {{rsrp}}dBm"
+          },
+          {
+            "var": "ssid2g",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"main2g_ssid\"\\s*:\\s*\"([^\"]*)\"",
+            "to": "1"
+          },
+          {
+            "var": "ssid5g",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"main5g_ssid\"\\s*:\\s*\"([^\"]*)\"",
+            "to": "1"
+          },
+
+          {
+            "var": "tx_spd",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"real_tx_speed\"\\s*:\\s*\"?(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "rx_spd",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"real_rx_speed\"\\s*:\\s*\"?(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "tx_f",
+            "source": "tx_spd",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{5})$",
+            "to": "$1.$2 MB/s"
+          },
+          {
+            "var": "tx_f",
+            "source": "tx_f",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{2})$",
+            "to": "$1.$2 KB/s"
+          },
+          {
+            "var": "tx_f",
+            "source": "tx_f",
+            "function": "regex_replace",
+            "pattern": "^(\\d{1,3})$",
+            "to": "$1 B/s"
+          },
+          {
+            "var": "rx_f",
+            "source": "rx_spd",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{5})$",
+            "to": "$1.$2 MB/s"
+          },
+          {
+            "var": "rx_f",
+            "source": "rx_f",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{2})$",
+            "to": "$1.$2 KB/s"
+          },
+          {
+            "var": "rx_f",
+            "source": "rx_f",
+            "function": "regex_replace",
+            "pattern": "^(\\d{1,3})$",
+            "to": "$1 B/s"
+          },
+          {
+            "var": "d_tx",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"day_tx_bytes\":(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "d_rx",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"day_rx_bytes\":(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "m_tx",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"month_tx_bytes\":(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "m_rx",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"month_rx_bytes\":(\\d+)",
+            "to": "1"
+          },
+          {
+            "var": "d_tx_gb",
+            "source": "d_tx",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{8})$",
+            "to": "$1.$2"
+          },
+          {
+            "var": "d_tx_gb",
+            "source": "d_tx_gb",
+            "function": "regex_replace",
+            "pattern": "^(\\d)(\\d{8})$",
+            "to": "0.$1"
+          },
+          {
+            "var": "d_tx_gb",
+            "source": "d_tx_gb",
+            "function": "regex_replace",
+            "pattern": "^\\d{1,8}$",
+            "to": "<0.1"
+          },
+          {
+            "var": "d_rx_gb",
+            "source": "d_rx",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{8})$",
+            "to": "$1.$2"
+          },
+          {
+            "var": "d_rx_gb",
+            "source": "d_rx_gb",
+            "function": "regex_replace",
+            "pattern": "^(\\d)(\\d{8})$",
+            "to": "0.$1"
+          },
+          {
+            "var": "d_rx_gb",
+            "source": "d_rx_gb",
+            "function": "regex_replace",
+            "pattern": "^\\d{1,8}$",
+            "to": "<0.1"
+          },
+          {
+            "var": "m_tx_gb",
+            "source": "m_tx",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{8})$",
+            "to": "$1.$2"
+          },
+          {
+            "var": "m_tx_gb",
+            "source": "m_tx_gb",
+            "function": "regex_replace",
+            "pattern": "^(\\d)(\\d{8})$",
+            "to": "0.$1"
+          },
+          {
+            "var": "m_tx_gb",
+            "source": "m_tx_gb",
+            "function": "regex_replace",
+            "pattern": "^\\d{1,8}$",
+            "to": "<0.1"
+          },
+          {
+            "var": "m_rx_gb",
+            "source": "m_rx",
+            "function": "regex_replace",
+            "pattern": "^(\\d+)(\\d)(\\d{8})$",
+            "to": "$1.$2"
+          },
+          {
+            "var": "m_rx_gb",
+            "source": "m_rx_gb",
+            "function": "regex_replace",
+            "pattern": "^(\\d)(\\d{8})$",
+            "to": "0.$1"
+          },
+          {
+            "var": "m_rx_gb",
+            "source": "m_rx_gb",
+            "function": "regex_replace",
+            "pattern": "^\\d{1,8}$",
+            "to": "<0.1"
+          },
+          {
+            "var": "batt_color",
+            "source": "bat",
+            "function": "threshold_switch",
+            "value_map": {
+              "0": "2",
+              "10": "1",
+              "20": "0"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "key": "battery",
+      "label": "电量",
+      "short_label": "🔋",
+      "format_val": "{{chg_icon}}{{bat ?? '--'}}% {{bat_temp ?? '--'}}℃",
+      "unit": "",
+      "color": "{{batt_color}}"
+    },
+    {
+      "key": "network",
+      "label": "{{provider_cn ?? provider ?? 'CPE'}}",
+      "short_label": "📶",
+      "format_val": "{{net_type ?? '--'}} {{band ?? '--'}}{{rsrp_txt ?? ''}}",
+      "unit": ""
+    },
+    {
+      "key": "speed",
+      "label": "速率",
+      "short_label": "⇅",
+      "format_val": "↑{{tx_f ?? '0 B/s'}} ↓{{rx_f ?? '0 B/s'}}",
+      "unit": ""
+    },
+    {
+      "key": "day_flux",
+      "label": "今日流量",
+      "short_label": "日",
+      "format_val": "↑{{d_tx_gb ?? '0'}} ↓{{d_rx_gb ?? '0'}}",
+      "unit": "GB"
+    },
+    {
+      "key": "month_flux",
+      "label": "本月流量",
+      "short_label": "月",
+      "format_val": "↑{{m_tx_gb ?? '0'}} ↓{{m_rx_gb ?? '0'}}",
+      "unit": "GB"
+    }
+  ]
+}

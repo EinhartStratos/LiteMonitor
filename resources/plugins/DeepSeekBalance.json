@@ -1,0 +1,125 @@
+{
+  "id": "DeepSeekBalance",
+  "meta": {
+    "name": "DeepSeek余额",
+    "version": "1.0",
+    "author": "LiteMonitor",
+    "description": "查询 DeepSeek 账户余额，只显示 CNY 人民币余额，需要填入 API Key"
+  },
+  "inputs": [
+    {
+      "key": "api_key",
+      "label": "API Key",
+      "type": "password",
+      "default": "",
+      "placeholder": "sk-xxxxxxxx",
+      "scope": "global"
+    }
+  ],
+  "execution": {
+    "type": "chain",
+    "interval": 60,
+    "steps": [
+      {
+        "id": "fetch_balance",
+        "url": "https://api.deepseek.com/user/balance",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer {{api_key}}",
+          "Accept": "application/json"
+        },
+        "response_format": "text",
+        "extract": {
+          "raw": "$"
+        },
+        "process": [
+          {
+            "var": "bal_cny1",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"currency\"\\s*:\\s*\"CNY\"[^}]*?\"total_balance\"\\s*:\\s*\"?([\\d.]+)",
+            "to": "1"
+          },
+          {
+            "var": "bal_cny2",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"total_balance\"\\s*:\\s*\"?([\\d.]+)\"?[^}]*?\"currency\"\\s*:\\s*\"CNY\"",
+            "to": "1"
+          },
+          {
+            "var": "bal_any",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"total_balance\"\\s*:\\s*\"?([\\d.]+)",
+            "to": "1"
+          },
+          {
+            "var": "cur_any",
+            "source": "raw",
+            "function": "regex_match",
+            "pattern": "\"currency\"\\s*:\\s*\"(\\w+)\"",
+            "to": "1"
+          },
+          {
+            "var": "cny_hit",
+            "source": "bal_cny1",
+            "function": "regex_replace",
+            "pattern": "^[\\s\\S]*$",
+            "to": "{{bal_cny1 ?? bal_cny2}}"
+          },
+          {
+            "var": "balance",
+            "source": "bal_any",
+            "function": "regex_replace",
+            "pattern": "^[\\s\\S]*$",
+            "to": "{{bal_cny1 ?? bal_cny2 ?? bal_any}}"
+          },
+          {
+            "var": "currency",
+            "source": "cur_any",
+            "function": "regex_replace",
+            "pattern": "^[\\s\\S]*$",
+            "to": "{{cny_hit ? 'CNY' : cur_any}}"
+          },
+          {
+            "var": "curr_prefix",
+            "source": "currency",
+            "function": "map",
+            "map": {
+              "CNY": "¥ ",
+              "USD": "$ "
+            }
+          },
+          {
+            "var": "curr_prefix",
+            "source": "curr_prefix",
+            "function": "regex_replace",
+            "pattern": "^([A-Za-z]{3})$",
+            "to": "$1 "
+          },
+          {
+            "var": "balance_color",
+            "source": "balance",
+            "function": "threshold_switch",
+            "value_map": {
+              "0": "2",
+              "10": "1",
+              "50": "0"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "key": "balance",
+      "label": "DeepSeek余额",
+      "short_label": "DS",
+      "format_val": "{{curr_prefix}}{{balance ?? '--'}}",
+      "unit": "",
+      "color": "{{balance_color}}"
+    }
+  ]
+}
