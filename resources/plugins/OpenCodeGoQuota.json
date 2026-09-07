@@ -1,0 +1,98 @@
+{
+  "id": "OpenCodeGoQuota",
+  "meta": {
+    "name": "OpenCode Go 额度",
+    "version": "1.0",
+    "author": "LiteMonitor",
+    "description": "查询 OpenCode Go 的 5h / Weekly / Monthly 额度使用情况，需填入 OpenCode Go API Key"
+  },
+  "inputs": [
+    {
+      "key": "api_key",
+      "label": "OpenCode Go API Key",
+      "type": "password",
+      "default": "",
+      "placeholder": "从 opencode auth / 环境变量 OPENCODE_API_KEY 复制",
+      "scope": "global"
+    }
+  ],
+  "execution": {
+    "type": "chain",
+    "interval": 300,
+    "steps": [
+      {
+        "id": "fetch_quota",
+        "url": "https://opencode.ai/zen/go/v1/usage",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer {{api_key}}",
+          "Accept": "application/json"
+        },
+        "response_format": "json",
+        "extract": {
+          "rolling_pct": "usage.rolling.percent",
+          "weekly_pct": "usage.weekly.percent",
+          "monthly_pct": "usage.monthly.percent"
+        },
+        "process": [
+          {
+            "var": "rolling_color",
+            "source": "rolling_pct",
+            "function": "threshold_switch",
+            "value_map": {
+              "0": "0",
+              "50": "1",
+              "80": "2"
+            }
+          },
+          {
+            "var": "weekly_color",
+            "source": "weekly_pct",
+            "function": "threshold_switch",
+            "value_map": {
+              "0": "0",
+              "50": "1",
+              "80": "2"
+            }
+          },
+          {
+            "var": "monthly_color",
+            "source": "monthly_pct",
+            "function": "threshold_switch",
+            "value_map": {
+              "0": "0",
+              "50": "1",
+              "80": "2"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "key": "rolling",
+      "label": "Go 5h",
+      "short_label": "5h",
+      "format_val": "{{rolling_pct ?? '--'}}% 已用",
+      "unit": "",
+      "color": "{{rolling_color}}"
+    },
+    {
+      "key": "weekly",
+      "label": "Go Weekly",
+      "short_label": "周",
+      "format_val": "{{weekly_pct ?? '--'}}% 已用",
+      "unit": "",
+      "color": "{{weekly_color}}"
+    },
+    {
+      "key": "monthly",
+      "label": "Go Monthly",
+      "short_label": "月",
+      "format_val": "{{monthly_pct ?? '--'}}% 已用",
+      "unit": "",
+      "color": "{{monthly_color}}"
+    }
+  ]
+}
